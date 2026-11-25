@@ -10,7 +10,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:'Andika',system-ui,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none}
 #app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:safe center;padding:3vh 4vw;gap:2vh;overflow:hidden}
-#status{position:fixed;top:14px;left:18px;font-size:clamp(16px,2.4vw,24px);color:var(--muted);letter-spacing:.05em}
+#status{position:fixed;top:18px;left:140px;font-size:clamp(16px,2.4vw,24px);color:var(--muted);letter-spacing:.05em}
 #status .dot{display:inline-block;width:.7em;height:.7em;border-radius:50%;background:#e6dff0;margin-left:.25em;vertical-align:middle}
 #status .dot.on{background:#ffb703}
 #prompt:empty,#pattern:empty{display:none}
@@ -26,7 +26,14 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 @keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-.08em)}75%{transform:translateX(.08em)}}
 body.success #word .ch{color:var(--ok)!important;animation:pop .45s}
-#gear{position:fixed;top:10px;right:10px;width:48px;height:48px;border:none;border-radius:50%;background:transparent;font-size:26px;opacity:.3;cursor:pointer}
+#gear{position:fixed;top:10px;right:10px;width:48px;height:48px;border:none;border-radius:50%;background:transparent;font-size:26px;opacity:.3;cursor:pointer;z-index:11}
+#home{position:fixed;top:8px;left:10px;height:52px;padding:0 14px;border:none;border-radius:14px;background:#efe6d6;font:inherit;font-size:24px;font-weight:700;color:#6d6678;cursor:pointer;z-index:5}
+.games{display:flex;flex-wrap:wrap;gap:3vw;justify-content:center;margin-top:2vh}
+button.game{font:inherit;font-weight:700;border:none;border-radius:28px;cursor:pointer;color:#2b2a33;width:min(28vw,300px);min-width:200px;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.25em;font-size:clamp(22px,3.2vw,38px);box-shadow:0 .18em 0 rgba(0,0,0,.18);transition:transform .1s}
+button.game:active{transform:translateY(3px)}
+button.game .ico{font-size:2.2em;line-height:1}
+button.game .num{font-size:.6em;opacity:.55}
+#settings{z-index:12}
 #start,#settings{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:20px}
 #start h1{font-size:clamp(30px,6vw,64px);margin:0 0 .4em}
 #start p{font-size:clamp(16px,2.6vw,22px);color:#6d6678;margin:.3em 0}
@@ -55,21 +62,22 @@ select{max-width:100%;margin-top:6px}
   <div id="word"></div>
 </div>
 <button id="gear" title="Ustawienia (dla rodzica)">⚙️</button>
+<button id="home" class="hidden" title="Wróć do wyboru gry (Esc)">⟵ Gry</button>
 
 <div id="start">
   <h1>Literkowa klawiatura</h1>
-  <button class="big" id="startBtn">Start</button>
-  <p>albo naciśnij dowolny klawisz na klawiaturze</p>
+  <div class="games">
+    <button class="game" data-mode="free" style="background:#ffd166"><span class="ico">✏️</span>Pisanie<span class="num">klawisz 1</span></button>
+    <button class="game" data-mode="task" style="background:#8ecae6"><span class="ico">📝</span>Napisz słowo<span class="num">klawisz 2</span></button>
+    <button class="game" data-mode="read" style="background:#b8e0a8"><span class="ico">📖</span>Czytanie<span class="num">klawisz 3</span></button>
+  </div>
   <p class="warn voicewarn hidden">Nie znaleziono polskiego głosu – słowa będą czytane z obcym akcentem. Na Androidzie: Ustawienia → Zamiana tekstu na mowę → silnik Google, język polski. Na Windowsie: Ustawienia → Czas i język → Mowa → Dodaj głosy → polski.</p>
 </div>
 
 <div id="settings" class="hidden"><div class="panel">
   <h2>Ustawienia</h2>
 
-  <div class="row"><b>Tryb</b>
-    <div class="seg" id="modeSeg"><button data-v="free">Swobodne pisanie</button><button data-v="task">Zadania „Napisz…”</button><button data-v="read">Czytanie „Przeczytaj…”</button></div>
-    <p class="note">Czytanie używa mikrofonu i rozpoznawania mowy. Najlepiej działa w wersji-pliku otwartej w Chrome (rozpoznawanie po polsku, potrzebny internet). W Claude rozpoznawanie może słuchać po angielsku. Przy pierwszym użyciu trzeba zezwolić na mikrofon.</p>
-  </div>
+
 
   <div class="row"><b>Poziom zadań</b>
     <div class="seg" id="levelSeg"></div>
@@ -103,9 +111,10 @@ select{max-width:100%;margin-top:6px}
   <p class="warn voicewarn hidden">Nie znaleziono polskiego głosu. Na Androidzie: Ustawienia → Zamiana tekstu na mowę → silnik Google, język polski. Na Windowsie: Ustawienia → Czas i język → Mowa → Dodaj głosy → polski.</p>
 
   <div class="row note">
-    <b>Swobodne pisanie:</b> litery – pisanie · Spacja – przeczytaj ostatnie słowo · Enter – przeczytaj wszystko · Backspace – cofnij · Esc – wyczyść<br>
+    <b>Swobodne pisanie:</b> litery – pisanie · Spacja – przeczytaj ostatnie słowo · Enter – przeczytaj wszystko · Backspace – cofnij · Delete – wyczyść<br>
     <b>Zadania:</b> litery – pisanie · Enter – powtórz polecenie · Spacja – przeczytaj, co już napisane · Backspace – cofnij<br>
     <b>Czytanie:</b> Enter lub Spacja – zacznij czytać (mikrofon słucha do 8 sekund) · Tab – aplikacja czyta słowo · Backspace – inne słowo<br>
+    <b>W każdej grze:</b> Esc lub przycisk „⟵ Gry” – powrót do wyboru gry. W menu: klawisze 1, 2, 3 wybierają grę.<br>
     Po 2 błędach z rzędu aplikacja mówi, jakiej litery szukać. Po 5 napisanych słowach jest pochwała i runda zaczyna się od nowa na tym samym poziomie.<br>
     Polskie litery (ą, ę, ł…) piszesz z prawym Alt, jeśli urządzenie ma ustawiony polski układ klawiatury.
   </div>
@@ -271,7 +280,7 @@ function freeKey(k){
     if(text.trim()){readOut(text.trim());fresh=true;}
   }else if(k==='Backspace'){
     fresh=false;text=text.slice(0,-1);render();
-  }else if(k==='Escape'){
+  }else if(k==='Delete'){
     text='';render();
   }
 }
@@ -307,6 +316,7 @@ async function win(){
   save();
   render();chime();
   await sleep(450);
+  if(!started)return;
   await say(BRAVO[Math.floor(Math.random()*BRAVO.length)]+' '+target);
   if(full){
     await sleep(300);fanfare();await sleep(800);
@@ -316,7 +326,7 @@ async function win(){
   await sleep(1200);
   nextTask();
 }
-function nextTask(){if(S.mode==='read')newRead();else newTask();}
+function nextTask(){if(!started)return;if(S.mode==='read')newRead();else newTask();}
 function taskKey(k){
   if(busy||!target)return;
   if(k==='Enter'||k==='Tab'){announce();return;}
@@ -500,7 +510,7 @@ function readKey(k){
   }else if(k==='Tab'){
     if(listening&&dict)dict.stop();
     say(target);
-  }else if(k==='Backspace'||k==='Escape'){
+  }else if(k==='Backspace'){
     if(listening&&dict)dict.stop();
     newRead();
   }
@@ -509,13 +519,30 @@ function readKey(k){
 /* ---------- start, klawiatura ---------- */
 async function wake(){try{if('wakeLock' in navigator)await navigator.wakeLock.request('screen');}catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&started)wake();});
-function start(){
-  if(started)return;started=true;
-  $('#start').classList.add('hidden');
-  try{const el=document.documentElement;const p=(el.requestFullscreen||el.webkitRequestFullscreen).call(el);if(p&&p.catch)p.catch(()=>{});}catch(e){}
-  wake();tone([1],0.01,'sine',0.0002);
+let firstStart=true;
+function start(mode){
+  if(started)return;
+  S.mode=mode;save();started=true;
+  $('#start').classList.add('hidden');$('#home').classList.remove('hidden');
+  if(firstStart){
+    firstStart=false;
+    try{const el=document.documentElement;const p=(el.requestFullscreen||el.webkitRequestFullscreen).call(el);if(p&&p.catch)p.catch(()=>{});}catch(e){}
+    wake();tone([1],0.01,'sine',0.0002);
+  }
   restartMode(true);
 }
+function showMenu(){
+  started=false;busy=false;talk++;
+  if(dict&&listening)dict.stop();
+  clearTimeout(readTimer);
+  if(hasTTS)speechSynthesis.cancel();
+  document.body.classList.remove('success');
+  text='';target='';typed='';heardShow='';
+  $('#home').classList.add('hidden');$('#start').classList.remove('hidden');
+  $('#word').innerHTML='';$('#prompt').textContent='';$('#pattern').textContent='';$('#status').innerHTML='';
+}
+document.querySelectorAll('button.game').forEach(b=>b.addEventListener('click',()=>start(b.dataset.mode)));
+$('#home').addEventListener('click',showMenu);
 function restartMode(greet){
   text='';fresh=false;
   if(dict&&listening)dict.stop();
@@ -523,13 +550,17 @@ function restartMode(greet){
   else if(S.mode==='read')newRead();
   else{render();if(greet)say('Pisz literki!');}
 }
-$('#startBtn').addEventListener('click',start);
 document.addEventListener('keydown',e=>{
   if(settingsOpen)return;
   if(e.ctrlKey||e.metaKey)return;
   if(e.repeat&&e.key!=='Backspace'){e.preventDefault();return;}
-  if(!started){if(e.key!=='Escape'){e.preventDefault();start();}return;}
-  if(e.key.length===1||['Enter','Backspace','Tab','Escape',' '].includes(e.key))e.preventDefault();
+  if(!started){
+    const m={'1':'free','2':'task','3':'read'}[e.key];
+    if(m){e.preventDefault();start(m);}
+    return;
+  }
+  if(e.key==='Escape'){e.preventDefault();showMenu();return;}
+  if(e.key.length===1||['Enter','Backspace','Tab','Delete',' '].includes(e.key))e.preventDefault();
   if(S.mode==='free')freeKey(e.key);else if(S.mode==='read')readKey(e.key);else taskKey(e.key);
 });
 
@@ -555,7 +586,7 @@ function openSettings(){
   const ls=$('#levelSeg');ls.innerHTML='';
   LEVELS.forEach((L,i)=>{const b=document.createElement('button');b.dataset.v=String(i);b.textContent=L.name;ls.appendChild(b);});
   const c=document.createElement('button');c.dataset.v='custom';c.textContent='Własne';ls.appendChild(c);
-  seg('modeSeg','mode');seg('checkSeg','check');seg('levelSeg','level',levelNote);levelNote();
+  seg('checkSeg','check');seg('levelSeg','level',levelNote);levelNote();
   $('#wordsIn').value=S.words;
   ['sayLetter','lenient','pattern','upper','syll','ctx'].forEach(k=>$('#'+k).checked=S[k]);
   $('#rate').value=S.rate;
