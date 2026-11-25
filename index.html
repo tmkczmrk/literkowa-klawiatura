@@ -570,17 +570,26 @@ cv.addEventListener('pointerdown',e=>{e.preventDefault();rewardKey(' ');});
 function rwJump(){const s=RW.sheep;if(RW.stun>0)return;if(s.ground){s.vy=H*1.2;s.ground=false;s.on=null;tone([440,660],0.06,'sine',0.08);}}
 const pickC=()=>FLOWER_COLORS[Math.floor(Math.random()*FLOWER_COLORS.length)];
 function rwSpawn(){
-  const x=W+SS,r=Math.random();
-  if(r<0.5){
+  const x=W+SS,r=Math.random();let extra=0;
+  if(r<0.35){
     const h=SS*(0.5+Math.random()*0.2);
-    const ob={k:Math.random()<0.6?'fence':'stone',x,w:SS*0.75,h};RW.objs.push(ob);
-    if(Math.random()<0.6){ob.f={k:'flower',x:x+SS*0.37,y:h+SS*0.9,c:pickC(),air:true};RW.objs.push(ob.f);}
+    const ob={k:Math.random()<0.6?'fence':'stone',x,w:SS*0.75,h,fl:[]};RW.objs.push(ob);
+    if(Math.random()<0.6){const f={k:'flower',x:x+SS*0.37,y:h+SS*0.9,c:pickC(),air:true};ob.fl.push(f);RW.objs.push(f);}
+  }else if(r<0.55){
+    // długi płotek: trzeba na niego wskoczyć i biec po nim; najwyższe kwiatki da się złapać tylko skacząc z płotka
+    const h=SS*(0.55+Math.random()*0.1),w=SS*(3.4+Math.random()*1.2);
+    const ob={k:'fence',x,w,h,fl:[]};RW.objs.push(ob);
+    const c=pickC();
+    for(let fx=x+SS*0.9;fx<x+w-SS*0.3;fx+=SS*0.8){const f={k:'flower',x:fx,y:h+SS*0.35,c,air:true};ob.fl.push(f);RW.objs.push(f);}
+    const c2=pickC();
+    for(let i=0;i<2;i++){const f={k:'flower',x:x+w-SS*(0.9-i*0.8),y:SS*(3.2+Math.random()*0.2),c:c2,air:true};ob.fl.push(f);RW.objs.push(f);}
+    extra=w;
   }else if(r<0.8){
     const c=pickC();for(let i=0;i<3;i++)RW.objs.push({k:'flower',x:x+i*SS*0.8,y:SS*0.35,c,air:false});
   }else{
     const c=pickC();for(let i=0;i<3;i++)RW.objs.push({k:'flower',x:x+i*SS*0.7,y:SS*(i===1?1.9:1.5),c,air:true});
   }
-  RW.nextAt=RW.dist+W*(0.45+Math.random()*0.4);
+  RW.nextAt=RW.dist+extra+W*(0.45+Math.random()*0.4);
 }
 function burst(x,y,c){for(let i=0;i<8;i++){const a=Math.random()*6.28,v=SS*(1.5+Math.random()*2);RW.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-SS*2,c,life:0.6});}}
 function kwiatki(n){if(n===1)return 'kwiatek';const d=n%10,dd=n%100;return (d>=2&&d<=4&&!(dd>=12&&dd<=14))?'kwiatki':'kwiatków';}
@@ -628,7 +637,7 @@ function rwLoop(now){
         if(!o.got&&Math.hypot(o.x-SX,(GY-o.y)-sy)<SS*0.7){o.got=true;RW.score++;tone([988,1319],0.05,'sine',0.09);burst(o.x,GY-o.y,o.c);}
       }else if(!o.hit&&RW.inv<=0&&s.on!==o){
         // uderzenie z boku – owieczka jest niżej niż wierzch przeszkody
-        if(over(o)&&s.y+m<o.h){o.hit=true;RW.inv=1.5;RW.stun=0.8;buzz();if(o.f&&!o.f.got)o.f.lost=true;}
+        if(over(o)&&s.y+m<o.h){o.hit=true;RW.inv=1.5;RW.stun=0.8;buzz();(o.fl||[]).forEach(f=>{if(!f.got)f.lost=true;});}
       }
     }
     RW.objs=RW.objs.filter(o=>o.x>-SS*2&&!o.got&&!(o.lost&&o.alpha<=0));
@@ -658,7 +667,8 @@ function drawFlower(x,y,r,c,stem){
 }
 function drawFence(o){
   const pw=SS*0.12;cx.fillStyle='#a0703c';
-  cx.fillRect(o.x,GY-o.h,pw,o.h);cx.fillRect(o.x+o.w-pw,GY-o.h,pw,o.h);
+  const n=Math.max(1,Math.round((o.w-pw)/(SS*0.9)));
+  for(let i=0;i<=n;i++)cx.fillRect(o.x+(o.w-pw)*i/n,GY-o.h,pw,o.h);
   cx.fillStyle='#c48a4c';const rh=SS*0.1;
   cx.fillRect(o.x-pw*0.3,GY-o.h*0.8,o.w+pw*0.6,rh);cx.fillRect(o.x-pw*0.3,GY-o.h*0.4,o.w+pw*0.6,rh);
 }
