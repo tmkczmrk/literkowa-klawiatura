@@ -34,6 +34,7 @@ button.game:active{transform:translateY(3px)}
 button.game .ico{font-size:2.2em;line-height:1}
 button.game .num{font-size:.6em;opacity:.55}
 #settings{z-index:12}
+#skip{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);height:56px;padding:0 22px;border:none;border-radius:16px;background:#efe6d6;font:inherit;font-size:24px;font-weight:700;color:#6d6678;cursor:pointer;z-index:5}
 #reward{position:fixed;inset:0;z-index:4;display:block;touch-action:manipulation}
 #start,#settings{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:20px}
 #start h1{font-size:clamp(30px,6vw,64px);margin:0 0 .4em}
@@ -64,6 +65,7 @@ select{max-width:100%;margin-top:6px}
   <div id="word"></div>
 </div>
 <button id="gear" title="Ustawienia (dla rodzica)">⚙️</button>
+<button id="skip" class="hidden" title="Inne słowo (Delete)">🔄 Inne słowo</button>
 <button id="home" class="hidden" title="Wróć do wyboru gry (Esc)">⟵ Gry</button>
 
 <div id="start">
@@ -114,8 +116,8 @@ select{max-width:100%;margin-top:6px}
 
   <div class="row note">
     <b>Swobodne pisanie:</b> litery – pisanie · Spacja – przeczytaj ostatnie słowo · Enter – przeczytaj wszystko · Backspace – cofnij · Delete – wyczyść<br>
-    <b>Zadania:</b> litery – pisanie · Enter – powtórz polecenie · Spacja – przeczytaj, co już napisane · Backspace – cofnij<br>
-    <b>Czytanie:</b> Enter lub Spacja – zacznij czytać (mikrofon słucha do 8 sekund) · Tab – aplikacja czyta słowo · Backspace – inne słowo<br>
+    <b>Zadania:</b> litery – pisanie · Enter – powtórz polecenie · Spacja – przeczytaj, co już napisane · Backspace – cofnij · Delete – inne słowo<br>
+    <b>Czytanie:</b> Enter lub Spacja – zacznij czytać (mikrofon słucha do 8 sekund) · Tab – aplikacja czyta słowo · Backspace lub Delete – inne słowo<br>
     <b>W każdej grze:</b> Esc lub przycisk „⟵ Gry” – powrót do wyboru gry. W menu: klawisze 1, 2, 3 wybierają grę.<br>
     Po 2 błędach z rzędu aplikacja mówi, jakiej litery szukać. Po 5 napisanych słowach jest pochwała i runda zaczyna się od nowa na tym samym poziomie.<br>
     Polskie litery (ą, ę, ł…) piszesz z prawym Alt, jeśli urządzenie ma ustawiony polski układ klawiatury.
@@ -263,6 +265,7 @@ function render(){
     $('#status').innerHTML=st;
   }
   popLast=false;
+  $('#skip').classList.toggle('hidden',!(started&&!RW.active&&(S.mode==='task'||S.mode==='read')&&target));
 }
 
 
@@ -332,8 +335,15 @@ async function win(){
   await sleep(1200);
   nextTask();
 }
+function skipWord(){
+  if(!started||RW.active||busy)return;
+  if(S.mode==='read'){if(dict&&listening)dict.stop();clearTimeout(readTimer);newRead();}
+  else if(S.mode==='task')newTask();
+}
+$('#skip').addEventListener('click',e=>{e.currentTarget.blur();skipWord();});
 function nextTask(){if(!started)return;if(S.mode==='read')newRead();else newTask();}
 function taskKey(k){
+  if(k==='Delete'){skipWord();return;}
   if(busy||!target)return;
   if(k==='Enter'||k==='Tab'){announce();return;}
   if(k==='Backspace'){typed=typed.slice(0,-1);wrongAt=-1;render();return;}
@@ -508,6 +518,7 @@ function readFailed(reason){
   }
 }
 function readKey(k){
+  if(k==='Delete'){skipWord();return;}
   if(busy||!target)return;
   if(k==='Enter'||k===' '){
     if(dictState==='off'||!dict){say(target);return;}
@@ -539,7 +550,7 @@ function openReward(){
   RW.clouds=[0,1,2,3].map(()=>({x:Math.random()*W,y:H*(0.08+Math.random()*0.25),s:0.6+Math.random()*0.6}));
   RW.sheep={y:0,vy:0,ground:true,step:0};
   RW.speed=W*0.32;RW.nextAt=W*0.6;
-  cv.classList.remove('hidden');$('#app').classList.add('hidden');$('#status').innerHTML='';
+  cv.classList.remove('hidden');$('#app').classList.add('hidden');$('#status').innerHTML='';$('#skip').classList.add('hidden');
   say('Nagroda! Owieczka zbiera kwiatki. Naciśnij spację, żeby zacząć.');
   RW.last=performance.now();cancelAnimationFrame(RW.raf);RW.raf=requestAnimationFrame(rwLoop);
 }
@@ -717,7 +728,7 @@ function showMenu(){
   if(hasTTS)speechSynthesis.cancel();
   document.body.classList.remove('success');
   text='';target='';typed='';heardShow='';
-  $('#home').classList.add('hidden');$('#start').classList.remove('hidden');
+  $('#home').classList.add('hidden');$('#skip').classList.add('hidden');$('#start').classList.remove('hidden');
   $('#word').innerHTML='';$('#prompt').textContent='';$('#pattern').textContent='';$('#status').innerHTML='';
 }
 document.querySelectorAll('button.game').forEach(b=>b.addEventListener('click',()=>start(b.dataset.mode)));
