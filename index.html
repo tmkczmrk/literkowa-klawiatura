@@ -547,7 +547,7 @@ function rwSize(){
 window.addEventListener('resize',()=>{if(RW.active)rwSize();});
 function openReward(){
   rwSize();
-  Object.assign(RW,{active:true,phase:'intro',t:0,score:0,objs:[],parts:[],dist:0,inv:0,scroll:0,endReady:false});
+  Object.assign(RW,{active:true,phase:'intro',t:0,score:0,objs:[],parts:[],dist:0,inv:0,stun:0,scroll:0,endReady:false});
   RW.clouds=[0,1,2,3].map(()=>({x:Math.random()*W,y:H*(0.08+Math.random()*0.25),s:0.6+Math.random()*0.6}));
   RW.sheep={y:0,vy:0,ground:true,step:0};
   RW.speed=W*0.32;RW.nextAt=W*0.6;
@@ -567,14 +567,14 @@ function rewardKey(k){
   else if(RW.phase==='end'&&RW.endReady){closeReward();S.progress=0;save();nextTask();}
 }
 cv.addEventListener('pointerdown',e=>{e.preventDefault();rewardKey(' ');});
-function rwJump(){const s=RW.sheep;if(s.ground){s.vy=H*1.2;s.ground=false;tone([440,660],0.06,'sine',0.08);}}
+function rwJump(){const s=RW.sheep;if(RW.stun>0)return;if(s.ground){s.vy=H*1.2;s.ground=false;tone([440,660],0.06,'sine',0.08);}}
 const pickC=()=>FLOWER_COLORS[Math.floor(Math.random()*FLOWER_COLORS.length)];
 function rwSpawn(){
   const x=W+SS,r=Math.random();
   if(r<0.5){
     const h=SS*(0.5+Math.random()*0.2);
-    RW.objs.push({k:Math.random()<0.6?'fence':'stone',x,w:SS*0.75,h});
-    if(Math.random()<0.6)RW.objs.push({k:'flower',x:x+SS*0.37,y:h+SS*0.9,c:pickC(),air:true});
+    const ob={k:Math.random()<0.6?'fence':'stone',x,w:SS*0.75,h};RW.objs.push(ob);
+    if(Math.random()<0.6){ob.f={k:'flower',x:x+SS*0.37,y:h+SS*0.9,c:pickC(),air:true};RW.objs.push(ob.f);}
   }else if(r<0.8){
     const c=pickC();for(let i=0;i<3;i++)RW.objs.push({k:'flower',x:x+i*SS*0.8,y:SS*0.35,c,air:false});
   }else{
@@ -600,22 +600,25 @@ function rwLoop(now){
   if(RW.phase==='play'){
     RW.t+=dt;
     RW.speed=W*(0.32+0.12*Math.min(1,RW.t/RW.dur));
-    const mv=RW.speed*dt;RW.dist+=mv;RW.scroll+=mv;
+    // po zderzeniu owieczka chwilę stoi oszołomiona – świat się nie przesuwa
+    const mv=(RW.stun>0?0:RW.speed)*dt;RW.dist+=mv;RW.scroll+=mv;
+    if(RW.stun>0)RW.stun-=dt;
     if(RW.dist>=RW.nextAt)rwSpawn();
     if(!s.ground){s.vy-=H*2.9*dt;s.y+=s.vy*dt;if(s.y<=0){s.y=0;s.vy=0;s.ground=true;}}
-    s.step+=dt*RW.speed/(SS*0.9);
+    if(RW.stun<=0)s.step+=dt*RW.speed/(SS*0.9);
     if(RW.inv>0)RW.inv-=dt;
     const sy=GY-s.y-SS*0.5;
     for(const o of RW.objs){
       o.x-=mv;
       if(o.k==='flower'){
+        if(o.lost){o.y=Math.max(SS*0.15,o.y-SS*4*dt);o.alpha=(o.alpha??1)-dt*0.9;continue;}
         if(!o.got&&Math.hypot(o.x-SX,(GY-o.y)-sy)<SS*0.7){o.got=true;RW.score++;tone([988,1319],0.05,'sine',0.09);burst(o.x,GY-o.y,o.c);}
       }else if(!o.hit&&RW.inv<=0){
         const m=SS*0.15;
-        if(SX+SS*0.5-m>o.x&&SX-SS*0.5+m<o.x+o.w&&s.y+m<o.h){o.hit=true;RW.inv=1.2;buzz();}
+        if(SX+SS*0.5-m>o.x&&SX-SS*0.5+m<o.x+o.w&&s.y+m<o.h){o.hit=true;RW.inv=1.5;RW.stun=0.8;buzz();if(o.f&&!o.f.got)o.f.lost=true;}
       }
     }
-    RW.objs=RW.objs.filter(o=>o.x>-SS*2&&!o.got);
+    RW.objs=RW.objs.filter(o=>o.x>-SS*2&&!o.got&&!(o.lost&&o.alpha<=0));
     if(RW.t>=RW.dur)rwEnd();
   }else if(RW.phase==='intro'){
     s.step+=dt*2;
@@ -627,6 +630,7 @@ function rwLoop(now){
   RW.raf=requestAnimationFrame(rwLoop);
 }
 /* rysowanie */
+function star(x,y,r){cx.beginPath();for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,rr=i%2?r*0.45:r;cx.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr);}cx.closePath();cx.fill();}
 function circ(x,y,r){cx.beginPath();cx.arc(x,y,r,0,Math.PI*2);cx.fill();}
 function drawCloud(x,y,r){cx.fillStyle='rgba(255,255,255,.9)';circ(x,y,r*0.5);circ(x+r*0.45,y+r*0.1,r*0.4);circ(x-r*0.45,y+r*0.12,r*0.35);circ(x+r*0.1,y+r*0.2,r*0.4);}
 function drawHills(off,color,baseY,amp,period){
@@ -684,11 +688,16 @@ function rwDraw(){
   cx.fillStyle='#69b058';const step=SS*0.9;
   for(let x=-(RW.scroll%step);x<W;x+=step){cx.fillRect(x,GY+SS*0.3,SS*0.18,SS*0.07);cx.fillRect(x+step*0.5,GY+SS*0.75,SS*0.14,SS*0.06);}
   for(const o of RW.objs){
-    if(o.k==='flower')drawFlower(o.x,GY-o.y,SS*0.26,o.c,!o.air);
+    if(o.k==='flower'){if(o.lost)cx.globalAlpha=Math.max(0,o.alpha??1);drawFlower(o.x,GY-o.y,SS*0.26,o.lost?'#b8b2a8':o.c,!o.air);cx.globalAlpha=1;}
     else if(o.k==='fence')drawFence(o);else drawStone(o);
   }
   const s=RW.sheep;
-  if(!(RW.inv>0&&Math.floor(RW.inv*10)%2))drawSheep(W*0.2,GY-s.y,SS,s);
+  if(RW.stun>0){
+    // oszołomiona: przechylona, z gwiazdkami nad głową
+    cx.save();cx.translate(W*0.2,GY-s.y);cx.rotate(-0.22);drawSheep(0,0,SS,s);cx.restore();
+    cx.fillStyle='#ffc300';
+    for(let i=0;i<3;i++){const a=RW.t*6+i*2.1;star(W*0.2+SS*0.4+Math.cos(a)*SS*0.3,GY-s.y-SS*1.05+Math.sin(a)*SS*0.1,SS*0.09);}
+  }else if(!(RW.inv>0&&Math.floor(RW.inv*10)%2))drawSheep(W*0.2,GY-s.y,SS,s);
   for(const p of RW.parts){cx.globalAlpha=Math.max(0,p.life/0.6);cx.fillStyle=p.c;circ(p.x,p.y,SS*0.07);}
   cx.globalAlpha=1;
   // licznik i czas
