@@ -773,10 +773,18 @@ function restartMode(greet){
   else if(S.mode==='read')newRead();
   else{render();if(greet)say('Pisz literki!');}
 }
+// blokada przytrzymanego klawisza: Chrome na Androidzie z klawiaturą Bluetooth nie oznacza
+// powtórzeń (e.repeat), więc sami pamiętamy, co jest wciśnięte, i ignorujemy szybkie serie
+const heldKeys=new Set();let lastKeyId='',lastKeyT=0;
+document.addEventListener('keyup',e=>heldKeys.delete(e.code||e.key));
+window.addEventListener('blur',()=>heldKeys.clear());
 document.addEventListener('keydown',e=>{
+  const kid=e.code||e.key;
+  const isRepeat=e.repeat||heldKeys.has(kid)||(kid===lastKeyId&&e.timeStamp-lastKeyT<90);
+  heldKeys.add(kid);lastKeyId=kid;lastKeyT=e.timeStamp;
   if(settingsOpen)return;
   if(e.ctrlKey||e.metaKey)return;
-  if(e.repeat&&e.key!=='Backspace'){e.preventDefault();return;}
+  if(isRepeat&&e.key!=='Backspace'){e.preventDefault();return;}
   if(!started){
     const m={'1':'free','2':'task','3':'read'}[e.key];
     if(m){e.preventDefault();start(m);}
