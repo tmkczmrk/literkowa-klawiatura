@@ -522,7 +522,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 let firstStart=true;
 function start(mode){
   if(started)return;
-  S.mode=mode;save();started=true;
+  S.mode=mode;S.progress=0;save();started=true;
   $('#start').classList.add('hidden');$('#home').classList.remove('hidden');
   if(firstStart){
     firstStart=false;
@@ -533,6 +533,7 @@ function start(mode){
 }
 function showMenu(){
   started=false;busy=false;talk++;
+  S.progress=0;save();
   if(dict&&listening)dict.stop();
   clearTimeout(readTimer);
   if(hasTTS)speechSynthesis.cancel();
