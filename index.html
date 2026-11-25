@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Literkowa klawiatura</title>
+<link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fff8ec;--ink:#2b2a33;--muted:#a59db3;--ok:#2e9e5b;--bad:#d64545}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:'Andika',system-ui,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:safe center;padding:3vh 4vw;gap:2vh;overflow:hidden}
+#status{position:fixed;top:14px;left:18px;font-size:clamp(16px,2.4vw,24px);color:var(--muted);letter-spacing:.05em}
+#status .dot{display:inline-block;width:.7em;height:.7em;border-radius:50%;background:#e6dff0;margin-left:.25em;vertical-align:middle}
+#status .dot.on{background:#ffb703}
+#prompt:empty,#pattern:empty{display:none}
+#prompt{font-size:clamp(20px,4.5vw,44px);color:var(--muted);min-height:1.3em;text-align:center}
+#pattern{font-size:clamp(30px,8vw,90px);color:#c9bfd8;letter-spacing:.1em;min-height:1.2em;font-weight:700}
+#word{display:flex;flex-wrap:wrap;justify-content:center;gap:.06em;font-size:min(16vw,24vh,220px);font-weight:700;line-height:1.15;min-height:1.2em;max-width:100%}
+.ch{display:inline-block;min-width:.6em;text-align:center}
+.ch.pop{animation:pop .25s}
+.slot{border-bottom:.06em solid #d9d0e6;min-width:.62em}
+.slot.hint{color:#ddd3ea}
+.ch.wrong{color:var(--bad)!important;animation:shake .35s}
+.space{min-width:.35em}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-.08em)}75%{transform:translateX(.08em)}}
+body.success #word .ch{color:var(--ok)!important;animation:pop .45s}
+#gear{position:fixed;top:10px;right:10px;width:48px;height:48px;border:none;border-radius:50%;background:transparent;font-size:26px;opacity:.3;cursor:pointer}
+#start,#settings{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:20px}
+#start h1{font-size:clamp(30px,6vw,64px);margin:0 0 .4em}
+#start p{font-size:clamp(16px,2.6vw,22px);color:#6d6678;margin:.3em 0}
+button.big{font:inherit;font-size:clamp(28px,6vw,56px);padding:.4em 1.4em;margin:.6em 0;border-radius:1em;border:none;background:#ffb703;color:#2b2a33;font-weight:700;cursor:pointer;box-shadow:0 .12em 0 #d99400}
+.panel{background:#fff;border-radius:18px;padding:22px 24px;max-width:640px;width:94vw;max-height:94vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.12);font-size:17px;text-align:left;-webkit-user-select:text;user-select:text}
+.panel h2{margin:0 0 8px}
+.row{margin:16px 0}
+label{display:block;margin:8px 0}
+textarea,select,input[type=text]{font:inherit;font-size:16px;padding:7px 9px;border-radius:10px;border:1px solid #ddd}
+textarea{width:100%;height:90px;margin-top:6px}
+select{max-width:100%;margin-top:6px}
+.btns{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.panel button{font:inherit;padding:8px 16px;border-radius:10px;border:1px solid #ccc;background:#fff;cursor:pointer}
+.seg{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.seg button.on,.btns .primary{background:#2b2a33;color:#fff;border-color:#2b2a33}
+.note{color:#777;font-size:14px;line-height:1.45}
+.warn{color:var(--bad);font-size:15px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="status"></div>
+<div id="app">
+  <div id="prompt"></div>
+  <div id="pattern"></div>
+  <div id="word"></div>
+</div>
+<button id="gear" title="Ustawienia (dla rodzica)">⚙️</button>
+
+<div id="start">
+  <h1>Literkowa klawiatura</h1>
+  <button class="big" id="startBtn">Start</button>
+  <p>albo naciśnij dowolny klawisz na klawiaturze</p>
+  <p class="warn voicewarn hidden">Nie znaleziono polskiego głosu – słowa będą czytane z obcym akcentem. Na Androidzie: Ustawienia → Zamiana tekstu na mowę → silnik Google, język polski. Na Windowsie: Ustawienia → Czas i język → Mowa → Dodaj głosy → polski.</p>
+</div>
+
+<div id="settings" class="hidden"><div class="panel">
+  <h2>Ustawienia</h2>
+
+  <div class="row"><b>Tryb</b>
+    <div class="seg" id="modeSeg"><button data-v="free">Swobodne pisanie</button><button data-v="task">Zadania „Napisz…”</button><button data-v="read">Czytanie „Przeczytaj…”</button></div>
+    <p class="note">Czytanie używa mikrofonu i rozpoznawania mowy. Najlepiej działa w wersji-pliku otwartej w Chrome (rozpoznawanie po polsku, potrzebny internet). W Claude rozpoznawanie może słuchać po angielsku. Przy pierwszym użyciu trzeba zezwolić na mikrofon.</p>
+  </div>
+
+  <div class="row"><b>Poziom zadań</b>
+    <div class="seg" id="levelSeg"></div>
+    <p class="note" id="levelNote"></p>
+    <label><input type="checkbox" id="syll"> W poleceniu powtarzaj słowo sylabami (np. „Napisz: mama. Ma… ma…”)</label>
+  </div>
+
+  <div class="row"><b>Własne słowa</b> <span class="note">(dla poziomu „Własne”; sylaby oddziel myślnikiem, np. ko-ta, ba-nan)</span>
+    <textarea id="wordsIn"></textarea>
+  </div>
+
+  <div class="row"><b>Sprawdzanie w zadaniach</b>
+    <div class="seg" id="checkSeg"><button data-v="now">Po każdej literze (łatwiej)</button><button data-v="word">Po całym słowie</button></div>
+  </div>
+
+  <div class="row">
+    <label><input type="checkbox" id="sayLetter"> Mów na głos każdą wciśniętą literę</label>
+    <label><input type="checkbox" id="lenient"> Przyjmuj literę bez ogonka (a zamiast ą) i pokazuj poprawną</label>
+    <label><input type="checkbox" id="pattern"> W zadaniach pokazuj wzór słowa (do przepisywania)</label>
+    <label><input type="checkbox" id="upper"> Wielkie litery na ekranie</label>
+  </div>
+
+  <div class="row"><b>Głos</b>
+    <br><select id="voiceSel"></select>
+    <p class="note" id="voiceInfo"></p>
+    <label><input type="checkbox" id="ctx"> W swobodnym pisaniu czytaj „Napisałeś: …” (pomaga, gdy głos czyta słowo po angielsku)</label>
+    Tempo: <input type="range" id="rate" min="0.5" max="1.2" step="0.05" style="width:45%;vertical-align:middle">
+    <br><input type="text" id="testText" value="Elena ma kota" style="width:60%;margin-top:8px"> <button id="testVoice">Posłuchaj</button>
+    <p class="note">Jeśli jakieś słowo brzmi po angielsku, wybierz z listy inny polski głos. Głosy z „Multilingual” w nazwie same zgadują język i przy krótkich słowach potrafią się mylić – dlatego wybór automatyczny ich unika.</p>
+  </div>
+  <p class="warn voicewarn hidden">Nie znaleziono polskiego głosu. Na Androidzie: Ustawienia → Zamiana tekstu na mowę → silnik Google, język polski. Na Windowsie: Ustawienia → Czas i język → Mowa → Dodaj głosy → polski.</p>
+
+  <div class="row note">
+    <b>Swobodne pisanie:</b> litery – pisanie · Spacja – przeczytaj ostatnie słowo · Enter – przeczytaj wszystko · Backspace – cofnij · Esc – wyczyść<br>
+    <b>Zadania:</b> litery – pisanie · Enter – powtórz polecenie · Spacja – przeczytaj, co już napisane · Backspace – cofnij<br>
+    <b>Czytanie:</b> Enter lub Spacja – zacznij czytać (mikrofon słucha do 8 sekund) · Tab – aplikacja czyta słowo · Backspace – inne słowo<br>
+    Po 2 błędach z rzędu aplikacja mówi, jakiej litery szukać. Po 5 napisanych słowach jest pochwała i runda zaczyna się od nowa na tym samym poziomie.<br>
+    Polskie litery (ą, ę, ł…) piszesz z prawym Alt, jeśli urządzenie ma ustawiony polski układ klawiatury.
+  </div>
+  <div class="btns"><button id="cancel">Anuluj</button><button class="primary" id="ok">Gotowe</button></div>
+</div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const LEVELS=[
+  {name:'1. Krótkie słowa',   note:'jedna sylaba, proste litery: kot, dom, las…', words:'kot dom las ul sok ser nos lis rak mak but tor pas lew bal'},
+  {name:'2. Dwie sylaby',     note:'sylaby otwarte: ma-ma, wo-da, ry-ba…',       words:'ma-ma ta-ta lo-dy wo-da no-gi ry-ba ku-ra ko-za ka-wa bu-ty ko-ty fo-ka so-wa ra-ma ro-sa ki-no'},
+  {name:'3. Trudniejsze',     note:'dwie sylaby, w tym zamknięte: ba-nan, lam-pa…', words:'ba-nan mo-tyl pi-lot lam-pa tor-ba kak-tus ba-lon me-lon pa-sek ko-tek do-mek'},
+  {name:'4. Polskie litery',  note:'ą, ę, ł, ż, sz, ch…: ża-ba, mu-cha, słoń…',  words:'ża-ba mu-cha słoń miś pies gęś rę-ka łód-ka szal czap-ka ró-ża mis-ka'}
+];
+const DEF={mode:'free',level:0,auto:true,syll:true,progress:0,words:'ma-ma\nta-ta\nko-ta\npies\ndom',sayLetter:true,lenient:true,check:'now',pattern:false,rate:0.85,upper:true,voiceName:'',ctx:false};
+let S=Object.assign({},DEF);
+try{const j=JSON.parse(localStorage.getItem('literki')||'null');if(j)Object.assign(S,j);}catch(e){}
+function save(){try{localStorage.setItem('literki',JSON.stringify(S));}catch(e){}}
+
+const COLORS=['#e63946','#f08c00','#2a9d8f','#3a6ea5','#9b5de5','#d6336c','#06a77d','#e76f51'];
+const BRAVO=['Brawo!','Super!','Świetnie!','Pięknie!','Tak jest!'];
+const STRIP={'ą':'a','ć':'c','ę':'e','ł':'l','ń':'n','ó':'o','ś':'s','ź':'z','ż':'z'};
+const LETTERS=/^[a-ząćęłńóśźż]$/;
+const base=c=>STRIP[c]||c;
+const same=(a,b)=>a===b||(S.lenient&&base(a)===base(b));
+const isLetter=k=>k.length===1&&LETTERS.test(k.toLowerCase());
+const disp=c=>S.upper?c.toUpperCase():c;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const PER_LEVEL=5;
+const MAX_CHARS=20;
+const SYL_COLORS=['#e63946','#3a6ea5','#f08c00','#2a9d8f'];
+
+let started=false,settingsOpen=false,popLast=false;
+let text='',fresh=false;
+let dictState='unknown',listening=false,heardShow='';
+let target='',syl=[],typed='',misses=0,busy=false,lastTarget='',wrongAt=-1,flash=null,hintAt=-1;
+
+/* ---------- głos ---------- */
+let voice=null,talk=0;
+const hasTTS='speechSynthesis' in window;
+function plVoices(){return hasTTS?speechSynthesis.getVoices().filter(v=>/^pl/i.test((v.lang||'').replace('_','-'))):[];}
+function vScore(v){let s=0;if(/multilingual/i.test(v.name))s-=10;if(/google/i.test(v.name))s+=3;if(/natural|neural/i.test(v.name))s+=2;if(v.localService)s+=1;return s;}
+function pickVoice(){
+  const vs=plVoices();
+  voice=(S.voiceName&&vs.find(v=>v.name===S.voiceName))||vs.slice().sort((a,b)=>vScore(b)-vScore(a))[0]||null;
+  const any=hasTTS&&speechSynthesis.getVoices().length>0;
+  document.querySelectorAll('.voicewarn').forEach(e=>e.classList.toggle('hidden',!!voice||(hasTTS&&!any)));
+  if(settingsOpen)fillVoices();
+}
+if(hasTTS){pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}
+else document.querySelectorAll('.voicewarn').forEach(e=>e.classList.remove('hidden'));
+
+// keep=true: część dłuższej wypowiedzi (nie przerywa łańcucha)
+function say(t,rate,keep){
+  if(!keep)talk++;
+  return new Promise(res=>{
+    if(!hasTTS){res();return;}
+    const busyNow=speechSynthesis.speaking||speechSynthesis.pending;
+    if(busyNow)speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(t);
+    window._lastUtt=u; // trzymaj referencję – Chrome potrafi zgubić wypowiedź
+    u.lang='pl-PL';if(voice)u.voice=voice;u.rate=rate||S.rate;
+    let done=false;const fin=()=>{if(!done){done=true;res();}};
+    u.onend=u.onerror=fin;
+    // po cancel() Chrome czasem połyka natychmiastowe speak() – krótka przerwa
+    const my=talk;
+    setTimeout(()=>{if(my!==talk){fin();return;}try{speechSynthesis.resume();speechSynthesis.speak(u);}catch(e){fin();}},busyNow?120:20);
+    setTimeout(fin,2500+t.length*180);
+  });
+}
+const sayLetter=c=>say(c.toUpperCase());
+
+/* ---------- dźwięki ---------- */
+let ac=null;
+function tone(freqs,dur,type,vol){
+  try{
+    ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+    if(ac.state==='suspended')ac.resume();
+    const t=ac.currentTime;
+    freqs.forEach((f,i)=>{
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.type=type;o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t+i*dur);
+      g.gain.linearRampToValueAtTime(vol,t+i*dur+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+i*dur+dur*1.8);
+      o.connect(g).connect(ac.destination);o.start(t+i*dur);o.stop(t+i*dur+dur*2);
+    });
+  }catch(e){}
+}
+const chime=()=>tone([523,659,784,1047],0.11,'sine',0.15);
+const fanfare=()=>tone([523,659,784,1047,784,1047,1319],0.12,'sine',0.16);
+const buzz=()=>tone([200,160],0.14,'triangle',0.12);
+
+/* ---------- słowa ---------- */
+function parseWords(str){
+  return str.split(/[\s,;]+/).map(x=>x.trim().toLowerCase()).filter(Boolean).map(x=>{
+    const parts=x.split('-').filter(Boolean);
+    const w=parts.join('');
+    return {w,syl:parts};
+  }).filter(o=>o.w&&[...o.w].every(c=>LETTERS.test(c)));
+}
+function currentList(){return S.level==='custom'?parseWords(S.words):parseWords(LEVELS[S.level].words);}
+
+/* ---------- rysowanie ---------- */
+function span(cls,txt,color){const s=document.createElement('span');s.className='ch '+cls;s.textContent=txt;if(color)s.style.color=color;return s;}
+function render(){
+  const w=$('#word');w.innerHTML='';
+  if(S.mode==='free'){
+    [...text].forEach((c,i)=>{
+      const last=i===text.length-1&&popLast;
+      w.appendChild(c===' '?span('space',' '):span(last?'pop':'',disp(c),COLORS[i%COLORS.length]));
+    });
+    $('#prompt').textContent=text?'':'Pisz literki!';
+    $('#pattern').textContent='';
+    $('#status').innerHTML='';
+  }else{
+    if(S.mode==='task'){
+      for(let i=0;i<target.length;i++){
+        if(i<typed.length){
+          const last=i===typed.length-1&&popLast;
+          w.appendChild(span((last?'pop ':'')+(i===wrongAt?'wrong':''),disp(typed[i]),COLORS[i%COLORS.length]));
+        }else if(flash&&flash.i===i){
+          w.appendChild(span('slot wrong',disp(flash.c)));
+        }else{
+          w.appendChild(span('slot',' '));
+        }
+      }
+      $('#prompt').textContent=target?'🔊 Enter – posłuchaj słowa':'Brak słów – dodaj je w ustawieniach ⚙️';
+      $('#pattern').textContent=S.pattern&&target?disp(target):'';
+    }else{
+      // czytanie: słowo w kolorach sylab
+      const parts=syl.length?syl:[target];
+      parts.forEach((p,si)=>{[...p].forEach(c=>w.appendChild(span('',disp(c),SYL_COLORS[si%SYL_COLORS.length])));});
+      let pr;
+      if(!target)pr='Brak słów – dodaj je w ustawieniach ⚙️';
+      else if(dictState==='off')pr='Rozpoznawanie mowy nie działa w tej przeglądarce – otwórz w Chrome. Enter – posłuchaj słowa';
+      else if(listening)pr='🎤 Słucham… czytaj na głos';
+      else pr='🎤 Naciśnij Enter i przeczytaj na głos';
+      $('#prompt').textContent=pr;
+      $('#pattern').textContent=heardShow;
+    }
+    let st=S.level==='custom'?'Własne słowa':'Poziom '+(S.level+1);
+    st+=' ';for(let i=0;i<PER_LEVEL;i++)st+='<span class="dot'+(i<S.progress?' on':'')+'"></span>';
+    $('#status').innerHTML=st;
+  }
+  popLast=false;
+}
+
+
+/* ---------- swobodne pisanie ---------- */
+const readOut=t=>say(S.ctx?'Napisałeś: '+t:t);
+function freeKey(k){
+  if(isLetter(k)){
+    if(fresh){text='';fresh=false;}
+    if(text.length>=MAX_CHARS)return;
+    text+=k.toLowerCase();popLast=true;render();
+    if(S.sayLetter)sayLetter(k);
+  }else if(k===' '){
+    if(fresh){fresh=false;text='';render();return;}
+    const last=text.split(' ').pop();
+    if(last){text+=' ';render();readOut(last);}
+  }else if(k==='Enter'){
+    if(text.trim()){readOut(text.trim());fresh=true;}
+  }else if(k==='Backspace'){
+    fresh=false;text=text.slice(0,-1);render();
+  }else if(k==='Escape'){
+    text='';render();
+  }
+}
+
+/* ---------- zadania ---------- */
+async function announce(){
+  const id=++talk;
+  await say('Napisz: '+target,null,true);
+  if(S.syll&&syl.length>1){
+    await sleep(350);
+    for(const s of syl){
+      if(id!==talk)return;
+      await say(s,S.rate*0.85,true);
+      if(id!==talk)return;
+      await sleep(300);
+    }
+  }
+}
+function newTask(){
+  const ws=currentList();
+  document.body.classList.remove('success');
+  typed='';misses=0;wrongAt=-1;flash=null;hintAt=-1;busy=false;
+  if(!ws.length){target='';syl=[];render();return;}
+  let o;do{o=ws[Math.floor(Math.random()*ws.length)];}while(ws.length>1&&o.w===lastTarget);
+  lastTarget=target=o.w;syl=o.syl;
+  render();
+  announce();
+}
+async function win(){
+  busy=true;document.body.classList.add('success');
+  S.progress++;
+  const full=S.progress>=PER_LEVEL;
+  save();
+  render();chime();
+  await sleep(450);
+  await say(BRAVO[Math.floor(Math.random()*BRAVO.length)]+' '+target);
+  if(full){
+    await sleep(300);fanfare();await sleep(800);
+    await say('Super! Udało się! '+(S.mode==='read'?'Przeczytałeś':'Napisałeś')+' pięć słów! Gramy jeszcze raz.');
+    S.progress=0;save();
+  }
+  await sleep(1200);
+  nextTask();
+}
+function nextTask(){if(S.mode==='read')newRead();else newTask();}
+function taskKey(k){
+  if(busy||!target)return;
+  if(k==='Enter'||k==='Tab'){announce();return;}
+  if(k==='Backspace'){typed=typed.slice(0,-1);wrongAt=-1;render();return;}
+  if(k===' '){if(typed)say(typed);else announce();return;}
+  if(!isLetter(k))return;
+  const c=k.toLowerCase(),i=typed.length;
+  if(i>=target.length)return;
+  wrongAt=-1;
+  if(S.check==='now'){
+    if(same(c,target[i])){
+      typed+=target[i];misses=0;hintAt=-1;popLast=true;flash=null;render();
+      if(typed.length===target.length){win();return;}
+      if(S.sayLetter)sayLetter(target[i]);
+    }else{
+      misses++;buzz();flash={i,c};
+      render();
+      setTimeout(()=>{if(flash&&flash.i===i){flash=null;render();}},700);
+      if(misses>=2&&misses%2===0)setTimeout(()=>say('Szukaj litery '+target[i].toUpperCase()),350);
+    }
+  }else{
+    typed+=c;popLast=true;render();
+    if(typed.length<target.length){if(S.sayLetter)sayLetter(c);return;}
+    let bad=-1;
+    for(let j=0;j<target.length;j++){if(!same(typed[j],target[j])){bad=j;break;}}
+    if(bad<0){typed=target;win();return;}
+    busy=true;
+    setTimeout(()=>{
+      wrongAt=bad;buzz();render();say('Prawie! Popraw.');
+      setTimeout(()=>{typed=typed.slice(0,bad);wrongAt=-1;busy=false;render();},1700);
+    },400);
+  }
+}
+
+/* ---------- czytanie (rozpoznawanie mowy) ---------- */
+let dict=null,heardFinal='',readTries=0,readOk=false,readTimer=null;
+const normR=t=>t.toLowerCase().replace(/[^a-ząćęłńóśźż]/g,'');
+const baseR=t=>[...t].map(base).join('');
+// zapis „jak brzmi”: rozpoznawanie czasem pisze krótkie słowa po angielsku (mak → mac),
+// a polskie dzieci mylą rz/ż, ó/u, ch/h – porównujemy więc brzmienie, nie pisownię
+function phon(t){
+  t=normR(t);
+  t=t.replace(/ck/g,'k').replace(/ph/g,'f').replace(/sh/g,'sz').replace(/th/g,'t')
+     .replace(/qu/g,'kw').replace(/q/g,'k').replace(/x/g,'ks').replace(/v/g,'w')
+     .replace(/ee/g,'i').replace(/oo/g,'u')
+     .replace(/rz/g,'ż').replace(/ó/g,'u').replace(/ch/g,'h')
+     .replace(/c(?![zhi])/g,'k');
+  t=baseR(t);
+  return t.replace(/(.)\1+/g,'$1'); // podwójne litery jak pojedyncze
+}
+function heardMatches(t){
+  const h=normR(t),g=normR(target);
+  if(!g||!h)return false;
+  return h.includes(g)||baseR(h).includes(baseR(g))||phon(h).includes(phon(g));
+}
+// rozpoznawanie mowy wbudowane w Chrome, z językiem polskim ustawionym na sztywno
+// (używane, gdy strona jest otwarta jako zwykły plik, a nie w Claude)
+function nativeDictation(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return null;
+  let rec=null,state='idle',endReason='stopped',ph=null,fh=null,sh=null;
+  const set=(st,reason)=>{state=st;if(sh)sh(reason?{state:st,reason}:{state:st});};
+  return {
+    start(){
+      return new Promise((res,rej)=>{
+        try{
+          rec=new SR();
+          rec.lang='pl-PL';rec.interimResults=true;rec.continuous=true;rec.maxAlternatives=3;
+          endReason='stopped';
+          rec.onstart=()=>{set('listening');res();};
+          rec.onresult=e=>{
+            let interim='';
+            for(let i=e.resultIndex;i<e.results.length;i++){
+              const r=e.results[i];
+              if(r.isFinal){
+                const alts=[];for(let j=0;j<r.length;j++)alts.push(r[j].transcript);
+                if(fh)fh({text:' '+alts.join(' / ')});
+              }else interim+=r[0].transcript;
+            }
+            if(ph)ph({text:interim});
+          };
+          rec.onerror=e=>{
+            if(e.error==='not-allowed'||e.error==='service-not-allowed')endReason='not_granted';
+            else if(e.error==='no-speech'||e.error==='aborted')endReason='stopped';
+            else endReason='upstream_error';
+            if(state==='starting')rej({code:endReason==='not_granted'?'not_granted':'upstream_error'});
+          };
+          rec.onend=()=>set('idle',endReason);
+          set('starting');
+          rec.start();
+        }catch(e){set('idle','upstream_error');rej({code:'upstream_error'});}
+      });
+    },
+    stop(){
+      return new Promise(res=>{
+        if(!rec||state==='idle'){res();return;}
+        const prev=rec.onend;rec.onend=()=>{prev();res();};
+        set('finishing');rec.stop();
+      });
+    },
+    onPartial(h){ph=h;},onFinal(h){fh=h;},onState(h){sh=h;}
+  };
+}
+function setupDictation(d){
+    dict=d;dictState=d?'on':'off';
+    if(d){
+      d.onPartial(({text:t})=>{
+        if(S.mode!=='read'||readOk)return;
+        heardShow=(heardFinal+' '+t).trim();render();
+        if(heardMatches(heardFinal+' '+t))readSuccess();
+      });
+      d.onFinal(({text:t})=>{
+        if(S.mode!=='read'||readOk)return;
+        heardFinal+=t;heardShow=heardFinal.trim();render();
+        if(heardMatches(heardFinal))readSuccess();
+      });
+      d.onState(({state,reason})=>{
+        const was=listening;
+        listening=state!=='idle';
+        if(S.mode==='read')render();
+        if(state==='idle'&&was&&S.mode==='read'&&!readOk)readFailed(reason);
+      });
+    }
+    render();
+}
+function initDictation(){
+  if(window.claude&&typeof claude.use==='function'){
+    claude.use('dictation').then(setupDictation).catch(()=>{dictState='off';render();});
+  }else{
+    setupDictation(nativeDictation());
+  }
+}
+function newRead(){
+  const ws=currentList();
+  document.body.classList.remove('success');
+  busy=false;readOk=false;readTries=0;heardFinal='';heardShow='';
+  if(!ws.length){target='';syl=[];render();return;}
+  let o;do{o=ws[Math.floor(Math.random()*ws.length)];}while(ws.length>1&&o.w===lastTarget);
+  lastTarget=target=o.w;syl=o.syl;
+  render();
+  say('Przeczytaj!');
+}
+function startListening(){
+  if(!dict||listening)return;
+  if(hasTTS)speechSynthesis.cancel(); // żeby mikrofon nie słyszał głosu aplikacji
+  talk++;
+  heardFinal='';heardShow='';
+  dict.start({language:'pl'}).catch(e=>{
+    const c=e&&e.code;
+    if(c==='not_granted'||c==='unavailable'){dictState='off';render();}
+    else if(c==='rate_limited'||c==='upstream_error'){say('Mikrofon nie działa. Spróbuj za chwilę.');}
+  });
+  clearTimeout(readTimer);
+  readTimer=setTimeout(()=>{if(dict&&listening)dict.stop();},8000);
+}
+async function readSuccess(){
+  if(readOk)return;
+  readOk=true;clearTimeout(readTimer);
+  try{await dict.stop();}catch(e){}
+  win();
+}
+function readFailed(reason){
+  clearTimeout(readTimer);
+  if(reason==='not_granted'||reason==='unavailable'){dictState='off';render();return;}
+  if(reason==='hidden'||reason==='viewer_stopped'||reason==='dismissed')return;
+  if(!normR(heardFinal)){say('Nie słyszę. Naciśnij Enter i przeczytaj głośno.');return;}
+  readTries++;buzz();
+  if(readTries>=2){
+    setTimeout(async()=>{await say('To słowo to: '+target+'. Powtórz!');},300);
+    readTries=0;
+  }else{
+    setTimeout(()=>say('Spróbuj jeszcze raz.'),300);
+  }
+}
+function readKey(k){
+  if(busy||!target)return;
+  if(k==='Enter'||k===' '){
+    if(dictState==='off'||!dict){say(target);return;}
+    if(listening){dict.stop();return;}
+    startListening();
+  }else if(k==='Tab'){
+    if(listening&&dict)dict.stop();
+    say(target);
+  }else if(k==='Backspace'||k==='Escape'){
+    if(listening&&dict)dict.stop();
+    newRead();
+  }
+}
+
+/* ---------- start, klawiatura ---------- */
+async function wake(){try{if('wakeLock' in navigator)await navigator.wakeLock.request('screen');}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&started)wake();});
+function start(){
+  if(started)return;started=true;
+  $('#start').classList.add('hidden');
+  try{const el=document.documentElement;const p=(el.requestFullscreen||el.webkitRequestFullscreen).call(el);if(p&&p.catch)p.catch(()=>{});}catch(e){}
+  wake();tone([1],0.01,'sine',0.0002);
+  restartMode(true);
+}
+function restartMode(greet){
+  text='';fresh=false;
+  if(dict&&listening)dict.stop();
+  if(S.mode==='task')newTask();
+  else if(S.mode==='read')newRead();
+  else{render();if(greet)say('Pisz literki!');}
+}
+$('#startBtn').addEventListener('click',start);
+document.addEventListener('keydown',e=>{
+  if(settingsOpen)return;
+  if(e.ctrlKey||e.metaKey)return;
+  if(e.repeat&&e.key!=='Backspace'){e.preventDefault();return;}
+  if(!started){if(e.key!=='Escape'){e.preventDefault();start();}return;}
+  if(e.key.length===1||['Enter','Backspace','Tab','Escape',' '].includes(e.key))e.preventDefault();
+  if(S.mode==='free')freeKey(e.key);else if(S.mode==='read')readKey(e.key);else taskKey(e.key);
+});
+
+/* ---------- ustawienia ---------- */
+let draft={};
+function seg(id,key,onchange){
+  document.querySelectorAll('#'+id+' button').forEach(b=>{
+    b.classList.toggle('on',String(draft[key])===b.dataset.v);
+    b.onclick=()=>{draft[key]=b.dataset.v==='custom'?'custom':(isNaN(+b.dataset.v)?b.dataset.v:+b.dataset.v);seg(id,key,onchange);if(onchange)onchange();};
+  });
+}
+function levelNote(){$('#levelNote').textContent=draft.level==='custom'?'Słowa z pola „Własne słowa” poniżej.':LEVELS[draft.level].note;}
+function fillVoices(){
+  const sel=$('#voiceSel'),vs=plVoices();
+  sel.innerHTML='';
+  const a=document.createElement('option');a.value='';a.textContent='Automatycznie (najlepszy polski)';sel.appendChild(a);
+  vs.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=v.name+(v.localService?'':' (online)');sel.appendChild(o);});
+  sel.value=vs.some(v=>v.name===draft.voiceName)?draft.voiceName:'';
+  $('#voiceInfo').textContent=voice?'Teraz czyta: '+voice.name:(vs.length?'':'Brak polskich głosów na tym urządzeniu.');
+}
+function openSettings(){
+  settingsOpen=true;draft=Object.assign({},S);
+  const ls=$('#levelSeg');ls.innerHTML='';
+  LEVELS.forEach((L,i)=>{const b=document.createElement('button');b.dataset.v=String(i);b.textContent=L.name;ls.appendChild(b);});
+  const c=document.createElement('button');c.dataset.v='custom';c.textContent='Własne';ls.appendChild(c);
+  seg('modeSeg','mode');seg('checkSeg','check');seg('levelSeg','level',levelNote);levelNote();
+  $('#wordsIn').value=S.words;
+  ['sayLetter','lenient','pattern','upper','syll','ctx'].forEach(k=>$('#'+k).checked=S[k]);
+  $('#rate').value=S.rate;
+  fillVoices();
+  $('#settings').classList.remove('hidden');
+}
+function closeSettings(apply){
+  if(apply){
+    draft.words=$('#wordsIn').value;
+    ['sayLetter','lenient','pattern','upper','syll','ctx'].forEach(k=>draft[k]=$('#'+k).checked);
+    draft.rate=parseFloat($('#rate').value);
+    draft.voiceName=$('#voiceSel').value;
+    if(draft.level!==S.level)draft.progress=0;
+    S=draft;save();pickVoice();
+  }else{pickVoice();}
+  settingsOpen=false;$('#settings').classList.add('hidden');
+  if(started&&apply)restartMode(false);else render();
+}
+$('#voiceSel').addEventListener('change',()=>{
+  const vs=plVoices(),n=$('#voiceSel').value;
+  voice=(n&&vs.find(v=>v.name===n))||vs.slice().sort((a,b)=>vScore(b)-vScore(a))[0]||null;
+  $('#voiceInfo').textContent=voice?'Teraz czyta: '+voice.name:'';
+});
+$('#gear').addEventListener('click',openSettings);
+$('#ok').addEventListener('click',()=>closeSettings(true));
+$('#cancel').addEventListener('click',()=>closeSettings(false));
+$('#testVoice').addEventListener('click',()=>say($('#testText').value||'Elena ma kota',parseFloat($('#rate').value)));
+render();
+initDictation();
+</script>
+</body>
+</html>
