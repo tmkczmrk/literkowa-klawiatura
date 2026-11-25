@@ -34,6 +34,7 @@ button.game:active{transform:translateY(3px)}
 button.game .ico{font-size:2.2em;line-height:1}
 button.game .num{font-size:.6em;opacity:.55}
 #settings{z-index:12}
+#reward{position:fixed;inset:0;z-index:4;display:block;touch-action:manipulation}
 #start,#settings{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:20px}
 #start h1{font-size:clamp(30px,6vw,64px);margin:0 0 .4em}
 #start p{font-size:clamp(16px,2.6vw,22px);color:#6d6678;margin:.3em 0}
@@ -56,6 +57,7 @@ select{max-width:100%;margin-top:6px}
 </head>
 <body>
 <div id="status"></div>
+<canvas id="reward" class="hidden"></canvas>
 <div id="app">
   <div id="prompt"></div>
   <div id="pattern"></div>
@@ -320,8 +322,12 @@ async function win(){
   await say(BRAVO[Math.floor(Math.random()*BRAVO.length)]+' '+target);
   if(full){
     await sleep(300);fanfare();await sleep(800);
-    await say('Super! Udało się! '+(S.mode==='read'?'Przeczytałeś':'Napisałeś')+' pięć słów! Gramy jeszcze raz.');
+    if(!started)return;
+    await say('Super! Udało się! '+(S.mode==='read'?'Przeczytałeś':'Napisałeś')+' pięć słów! Czas na nagrodę!');
     S.progress=0;save();
+    if(!started)return;
+    openReward();
+    return;
   }
   await sleep(1200);
   nextTask();
@@ -516,6 +522,177 @@ function readKey(k){
   }
 }
 
+/* ---------- nagroda: owieczka zbiera kwiatki ---------- */
+const RW={active:false,phase:'intro',raf:0,last:0,t:0,dur:40,score:0,objs:[],parts:[],clouds:[],sheep:null,speed:0,dist:0,nextAt:0,inv:0,scroll:0,endReady:false};
+const cv=$('#reward'),cx=cv.getContext('2d');
+let W=0,H=0,GY=0,SS=0;
+const FLOWER_COLORS=['#ff6b9a','#ff9f1c','#b388ff','#4dabf7','#ff5252','#f783ac'];
+function rwSize(){
+  const d=window.devicePixelRatio||1;W=window.innerWidth;H=window.innerHeight;
+  cv.width=Math.round(W*d);cv.height=Math.round(H*d);cv.style.width=W+'px';cv.style.height=H+'px';cx.setTransform(d,0,0,d,0,0);
+  GY=H*0.8;SS=Math.min(H*0.13,W*0.12);
+}
+window.addEventListener('resize',()=>{if(RW.active)rwSize();});
+function openReward(){
+  rwSize();
+  Object.assign(RW,{active:true,phase:'intro',t:0,score:0,objs:[],parts:[],dist:0,inv:0,scroll:0,endReady:false});
+  RW.clouds=[0,1,2,3].map(()=>({x:Math.random()*W,y:H*(0.08+Math.random()*0.25),s:0.6+Math.random()*0.6}));
+  RW.sheep={y:0,vy:0,ground:true,step:0};
+  RW.speed=W*0.32;RW.nextAt=W*0.6;
+  cv.classList.remove('hidden');$('#app').classList.add('hidden');$('#status').innerHTML='';
+  say('Nagroda! Owieczka zbiera kwiatki. Naciśnij spację, żeby zacząć.');
+  RW.last=performance.now();cancelAnimationFrame(RW.raf);RW.raf=requestAnimationFrame(rwLoop);
+}
+function closeReward(){
+  if(!RW.active)return;
+  RW.active=false;cancelAnimationFrame(RW.raf);
+  cv.classList.add('hidden');$('#app').classList.remove('hidden');
+}
+function rewardKey(k){
+  if(!(k===' '||k==='ArrowUp'||k==='Enter'))return;
+  if(RW.phase==='intro'){RW.phase='play';RW.t=0;talk++;if(hasTTS)speechSynthesis.cancel();}
+  else if(RW.phase==='play')rwJump();
+  else if(RW.phase==='end'&&RW.endReady){closeReward();S.progress=0;save();nextTask();}
+}
+cv.addEventListener('pointerdown',e=>{e.preventDefault();rewardKey(' ');});
+function rwJump(){const s=RW.sheep;if(s.ground){s.vy=H*1.35;s.ground=false;tone([440,660],0.06,'sine',0.08);}}
+const pickC=()=>FLOWER_COLORS[Math.floor(Math.random()*FLOWER_COLORS.length)];
+function rwSpawn(){
+  const x=W+SS,r=Math.random();
+  if(r<0.5){
+    const h=SS*(0.5+Math.random()*0.2);
+    RW.objs.push({k:Math.random()<0.6?'fence':'stone',x,w:SS*0.75,h});
+    if(Math.random()<0.6)RW.objs.push({k:'flower',x:x+SS*0.37,y:h+SS*0.9,c:pickC(),air:true});
+  }else if(r<0.8){
+    const c=pickC();for(let i=0;i<3;i++)RW.objs.push({k:'flower',x:x+i*SS*0.8,y:SS*0.35,c,air:false});
+  }else{
+    const c=pickC();for(let i=0;i<3;i++)RW.objs.push({k:'flower',x:x+i*SS*0.7,y:SS*(i===1?1.9:1.5),c,air:true});
+  }
+  RW.nextAt=RW.dist+W*(0.45+Math.random()*0.4);
+}
+function burst(x,y,c){for(let i=0;i<8;i++){const a=Math.random()*6.28,v=SS*(1.5+Math.random()*2);RW.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-SS*2,c,life:0.6});}}
+function kwiatki(n){if(n===1)return 'kwiatek';const d=n%10,dd=n%100;return (d>=2&&d<=4&&!(dd>=12&&dd<=14))?'kwiatki':'kwiatków';}
+function rwEnd(){
+  RW.phase='end';RW.endReady=false;fanfare();
+  setTimeout(async()=>{
+    await say('Brawo! Zebrałeś '+RW.score+' '+kwiatki(RW.score)+'!');
+    RW.endReady=true;
+  },700);
+  setTimeout(()=>{RW.endReady=true;},5000);
+}
+function rwLoop(now){
+  if(!RW.active)return;
+  let dt=Math.max(0,Math.min(0.05,(now-RW.last)/1000));RW.last=now;
+  if(settingsOpen)dt=0;
+  const SX=W*0.2,s=RW.sheep;
+  if(RW.phase==='play'){
+    RW.t+=dt;
+    RW.speed=W*(0.32+0.12*Math.min(1,RW.t/RW.dur));
+    const mv=RW.speed*dt;RW.dist+=mv;RW.scroll+=mv;
+    if(RW.dist>=RW.nextAt)rwSpawn();
+    if(!s.ground){s.vy-=H*2.6*dt;s.y+=s.vy*dt;if(s.y<=0){s.y=0;s.vy=0;s.ground=true;}}
+    s.step+=dt*RW.speed/(SS*0.9);
+    if(RW.inv>0)RW.inv-=dt;
+    const sy=GY-s.y-SS*0.5;
+    for(const o of RW.objs){
+      o.x-=mv;
+      if(o.k==='flower'){
+        if(!o.got&&Math.hypot(o.x-SX,(GY-o.y)-sy)<SS*0.7){o.got=true;RW.score++;tone([988,1319],0.05,'sine',0.09);burst(o.x,GY-o.y,o.c);}
+      }else if(!o.hit&&RW.inv<=0){
+        const m=SS*0.15;
+        if(SX+SS*0.5-m>o.x&&SX-SS*0.5+m<o.x+o.w&&s.y+m<o.h){o.hit=true;RW.inv=1.2;buzz();}
+      }
+    }
+    RW.objs=RW.objs.filter(o=>o.x>-SS*2&&!o.got);
+    if(RW.t>=RW.dur)rwEnd();
+  }else if(RW.phase==='intro'){
+    s.step+=dt*2;
+  }
+  for(const c of RW.clouds){c.x-=(RW.phase==='play'?RW.speed*0.08:W*0.01)*dt;if(c.x<-W*0.15){c.x=W*1.1;c.y=H*(0.08+Math.random()*0.25);}}
+  for(const p of RW.parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=SS*8*dt;p.life-=dt;}
+  RW.parts=RW.parts.filter(p=>p.life>0);
+  rwDraw();
+  RW.raf=requestAnimationFrame(rwLoop);
+}
+/* rysowanie */
+function circ(x,y,r){cx.beginPath();cx.arc(x,y,r,0,Math.PI*2);cx.fill();}
+function drawCloud(x,y,r){cx.fillStyle='rgba(255,255,255,.9)';circ(x,y,r*0.5);circ(x+r*0.45,y+r*0.1,r*0.4);circ(x-r*0.45,y+r*0.12,r*0.35);circ(x+r*0.1,y+r*0.2,r*0.4);}
+function drawHills(off,color,baseY,amp,period){
+  cx.fillStyle=color;cx.beginPath();cx.moveTo(0,GY+1);
+  for(let x=0;x<=W+10;x+=10)cx.lineTo(x,baseY-amp*(0.5+0.5*Math.sin((x+off)/period*Math.PI*2)));
+  cx.lineTo(W,GY+1);cx.closePath();cx.fill();
+}
+function drawFlower(x,y,r,c,stem){
+  if(stem){cx.strokeStyle='#3f8f3a';cx.lineWidth=r*0.25;cx.beginPath();cx.moveTo(x,y+r*0.6);cx.lineTo(x,GY);cx.stroke();}
+  cx.fillStyle=c;for(let i=0;i<5;i++){const a=i/5*Math.PI*2-Math.PI/2;circ(x+Math.cos(a)*r*0.55,y+Math.sin(a)*r*0.55,r*0.45);}
+  cx.fillStyle='#ffd43b';circ(x,y,r*0.38);
+}
+function drawFence(o){
+  const pw=SS*0.12;cx.fillStyle='#a0703c';
+  cx.fillRect(o.x,GY-o.h,pw,o.h);cx.fillRect(o.x+o.w-pw,GY-o.h,pw,o.h);
+  cx.fillStyle='#c48a4c';const rh=SS*0.1;
+  cx.fillRect(o.x-pw*0.3,GY-o.h*0.8,o.w+pw*0.6,rh);cx.fillRect(o.x-pw*0.3,GY-o.h*0.4,o.w+pw*0.6,rh);
+}
+function drawStone(o){
+  cx.fillStyle='#9a98a6';cx.beginPath();cx.ellipse(o.x+o.w/2,GY-o.h*0.45,o.w/2,o.h*0.55,0,0,Math.PI*2);cx.fill();
+  cx.fillStyle='#b9b7c4';cx.beginPath();cx.ellipse(o.x+o.w*0.38,GY-o.h*0.68,o.w*0.16,o.h*0.13,-0.4,0,Math.PI*2);cx.fill();
+}
+function drawSheep(x,gy,S2,st){
+  const by=gy-S2*0.58;
+  cx.strokeStyle='#3d3a45';cx.lineWidth=S2*0.09;cx.lineCap='round';
+  const sw=st.ground?Math.sin(st.step*Math.PI)*0.45:0.6;
+  [[-0.25,1],[-0.1,-1],[0.12,1],[0.27,-1]].forEach(([dx,dir])=>{
+    const lx=x+S2*dx,ly=by+S2*0.22,len=S2*0.36,a=st.ground?sw*dir:(dir>0?sw:-sw*0.6);
+    cx.beginPath();cx.moveTo(lx,ly);cx.lineTo(lx+Math.sin(a)*len*0.6,ly+Math.cos(a)*len);cx.stroke();
+  });
+  const wool=[[-0.32,0.02],[-0.15,-0.13],[0.05,-0.16],[0.23,-0.07],[-0.22,0.12],[0.02,0.12],[0.22,0.1],[-0.38,-0.08],[0.3,0.04]];
+  cx.fillStyle='#d9d5e0';wool.forEach(([dx,dy])=>circ(x+S2*dx,by+S2*dy,S2*0.215));
+  cx.fillStyle='#ffffff';wool.forEach(([dx,dy])=>circ(x+S2*dx,by+S2*dy,S2*0.19));
+  cx.fillStyle='#3d3a45';
+  cx.beginPath();cx.ellipse(x+S2*0.33,by-S2*0.2,S2*0.1,S2*0.05,0.6,0,Math.PI*2);cx.fill();
+  cx.beginPath();cx.ellipse(x+S2*0.45,by-S2*0.08,S2*0.16,S2*0.2,0.25,0,Math.PI*2);cx.fill();
+  cx.fillStyle='#fff';circ(x+S2*0.38,by-S2*0.29,S2*0.09);
+  circ(x+S2*0.5,by-S2*0.13,S2*0.05);cx.fillStyle='#1c1b22';circ(x+S2*0.515,by-S2*0.13,S2*0.026);
+  cx.fillStyle='#ff9eb5';circ(x+S2*0.57,by+S2*0.02,S2*0.03);
+}
+function panel(lines){
+  const fs=Math.max(20,SS*0.38);cx.font='700 '+fs+'px Andika, system-ui, sans-serif';cx.textAlign='center';cx.textBaseline='middle';
+  const lh=fs*1.5,h=lh*lines.length+fs,w=Math.min(W*0.9,Math.max(...lines.map(l=>cx.measureText(l[0]).width))+fs*2);
+  cx.fillStyle='rgba(255,255,255,.88)';cx.beginPath();cx.roundRect(W/2-w/2,H*0.42-h/2,w,h,fs*0.6);cx.fill();
+  lines.forEach(([t,c],i)=>{cx.fillStyle=c||'#2b2a33';cx.fillText(t,W/2,H*0.42-h/2+fs*0.5+lh*(i+0.5));});
+}
+function rwDraw(){
+  const g=cx.createLinearGradient(0,0,0,GY);g.addColorStop(0,'#a9dcff');g.addColorStop(1,'#e8f6ff');
+  cx.fillStyle=g;cx.fillRect(0,0,W,H);
+  cx.fillStyle='#ffd54a';circ(W*0.86,H*0.15,SS*0.55);
+  RW.clouds.forEach(c=>drawCloud(c.x,c.y,SS*c.s));
+  drawHills(RW.scroll*0.2,'#b5dfa9',GY-SS*1.4,SS*0.9,W*0.55);
+  drawHills(RW.scroll*0.45,'#94cf86',GY-SS*0.7,SS*0.7,W*0.35);
+  cx.fillStyle='#7cc36b';cx.fillRect(0,GY,W,H-GY);
+  cx.fillStyle='#69b058';const step=SS*0.9;
+  for(let x=-(RW.scroll%step);x<W;x+=step){cx.fillRect(x,GY+SS*0.3,SS*0.18,SS*0.07);cx.fillRect(x+step*0.5,GY+SS*0.75,SS*0.14,SS*0.06);}
+  for(const o of RW.objs){
+    if(o.k==='flower')drawFlower(o.x,GY-o.y,SS*0.26,o.c,!o.air);
+    else if(o.k==='fence')drawFence(o);else drawStone(o);
+  }
+  const s=RW.sheep;
+  if(!(RW.inv>0&&Math.floor(RW.inv*10)%2))drawSheep(W*0.2,GY-s.y,SS,s);
+  for(const p of RW.parts){cx.globalAlpha=Math.max(0,p.life/0.6);cx.fillStyle=p.c;circ(p.x,p.y,SS*0.07);}
+  cx.globalAlpha=1;
+  // licznik i czas
+  const fs=Math.max(22,SS*0.42);
+  drawFlower(W/2-fs*1.2,fs*1.2,fs*0.45,'#ff6b9a',false);
+  cx.font='700 '+fs+'px Andika, system-ui, sans-serif';cx.textAlign='left';cx.textBaseline='middle';cx.fillStyle='#2b2a33';
+  cx.fillText(String(RW.score),W/2-fs*0.5,fs*1.25);
+  if(RW.phase!=='intro'){
+    const bw=W*0.3,frac=Math.max(0,1-RW.t/RW.dur);
+    cx.fillStyle='rgba(255,255,255,.7)';cx.fillRect(W/2-bw/2,fs*2.1,bw,fs*0.22);
+    cx.fillStyle='#ffb703';cx.fillRect(W/2-bw/2,fs*2.1,bw*frac,fs*0.22);
+  }
+  if(RW.phase==='intro')panel([['Owieczka zbiera kwiatki 🌼'],['Spacja – skok','#6d6678'],['Naciśnij spację, żeby zacząć!','#2a9d8f']]);
+  if(RW.phase==='end')panel([['Brawo! 🌼 '+RW.score+' '+kwiatki(RW.score)],RW.endReady?['Spacja – graj dalej · Esc – menu','#6d6678']:['…','#6d6678']]);
+}
+
 /* ---------- start, klawiatura ---------- */
 async function wake(){try{if('wakeLock' in navigator)await navigator.wakeLock.request('screen');}catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&started)wake();});
@@ -532,6 +709,7 @@ function start(mode){
   restartMode(true);
 }
 function showMenu(){
+  closeReward();
   started=false;busy=false;talk++;
   S.progress=0;save();
   if(dict&&listening)dict.stop();
@@ -561,6 +739,7 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(e.key==='Escape'){e.preventDefault();showMenu();return;}
+  if(RW.active){e.preventDefault();rewardKey(e.key);return;}
   if(e.key.length===1||['Enter','Backspace','Tab','Delete',' '].includes(e.key))e.preventDefault();
   if(S.mode==='free')freeKey(e.key);else if(S.mode==='read')readKey(e.key);else taskKey(e.key);
 });
